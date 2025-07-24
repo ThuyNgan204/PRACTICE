@@ -14,7 +14,7 @@ def save_frame():
     filename = file.filename or f'frame_{int(time.time() * 1000)}.jpg'
     save_path = os.path.join(SAVE_FOLDER, filename)
     file.save(save_path)
-    print(f'✅ Đã lưu: {save_path}')
+    print(f'✅: {save_path}')
     return 'OK', 200
 
 if __name__ == '__main__':
