@@ -1,46 +1,25 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 export default function VideoReceiver() {
   const [latestFrame, setLatestFrame] = useState(null);
   const [index, setIndex] = useState(0);
-  const lastFrameRef = useRef(null);
 
   useEffect(() => {
     let shouldFetch = true;
 
-    const checkAndFetch = async () => {
+    const fetchLoop = async () => {
       while (shouldFetch) {
         try {
-          const res = await fetch('http://192.168.56.1:5000/api/status');
+          const res = await fetch('http://127.0.0.1:5001/api/frames');
           const data = await res.json();
-          const running = data.running;
 
-          // ✅ Chỉ fetch frame mới nếu tên frame khác với lần trước
-          if (running && data.latest_frame && data.latest_frame !== lastFrameRef.current) {
-            lastFrameRef.current = data.latest_frame;
-
-            const imgRes = await fetch(`http://192.168.56.1:5000/frames/${data.latest_frame}`);
-            const blob = await imgRes.blob();
-
-            setLatestFrame(URL.createObjectURL(blob));
-
-            // Gửi blob sang client.py để lưu
-            const formData = new FormData();
-            formData.append('frame', blob, data.latest_frame);
-            await fetch('http://127.0.0.1:5001/save_frame', {
-              method: 'POST',
-              body: formData,
-            });
-
-            console.log(`💾 Đã lưu: ${data.latest_frame}`);
-            setIndex(prev => prev + 1);
+          if (data.frame) {
+            // Lưu ý: phải gọi đúng URL BE máy B
+            setLatestFrame(`http://127.0.0.1:5001/saved_frames/${data.frame}`);
+            setIndex(data.count);
           }
 
-          if (running) {
-            await new Promise(res => setTimeout(res, 100));
-          } else {
-            await new Promise(res => setTimeout(res, 1000));
-          }
+          await new Promise(res => setTimeout(res, 100)); // khoảng 10fps
         } catch (e) {
           console.error('❌ Error:', e);
           await new Promise(res => setTimeout(res, 1000));
@@ -48,15 +27,17 @@ export default function VideoReceiver() {
       }
     };
 
-    checkAndFetch();
+    fetchLoop();
 
     return () => { shouldFetch = false; };
   }, []);
 
   return (
     <div>
-      <h2>📥 Máy B</h2>
-      {latestFrame && <img src={latestFrame} alt="Latest frame" style={{ maxWidth: '100%' }} />}
+      <h2>📥 Máy B (FE)</h2>
+      {latestFrame && (
+        <img src={latestFrame} alt="Latest frame" style={{ maxWidth: '100%' }} />
+      )}
       <p>Frame count: {index}</p>
     </div>
   );

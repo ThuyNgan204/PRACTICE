@@ -1,68 +1,40 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 
-export default function VideoCapture() {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const frameIndexRef = useRef(0);
-  const isUploadingRef = useRef(false);  // để tránh upload trùng
+export default function VideoPlayer() {
+  const [latestIndex, setLatestIndex] = useState(-1);
+  const [imgUrl, setImgUrl] = useState(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const scale = 0.3;
+    let running = true;
 
-    let captureInterval;
+    const fetchLoop = async () => {
+      while (running) {
+        try {
+          const res = await fetch('http://127.0.0.1:5000/api/status');
+          const data = await res.json();
 
-    const capture = () => {
-      if (video.paused || video.ended) return;
-
-      if (isUploadingRef.current) {
-        // Đang upload frame trước, bỏ qua lần capture này
-        return;
-      }
-      isUploadingRef.current = true;
-
-      canvas.width = video.videoWidth * scale;
-      canvas.height = video.videoHeight * scale;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          const index = frameIndexRef.current++;
-          const timestamp = Date.now();
-          const formData = new FormData();
-          formData.append('frame', blob, `frame_${index}_${timestamp}.jpg`);
-          formData.append('running', 'true');
-
-          try {
-            await fetch('http://192.168.56.1:5000/api/upload_frame', {
-              method: 'POST',
-              body: formData,
-            });
-            console.log(`✅ Uploaded frame_${index}_${timestamp}`);
-          } catch (e) {
-            console.error('❌ Upload error:', e);
+          if (data.latest_index !== latestIndex && data.latest_index >= 0) {
+            setLatestIndex(data.latest_index);
+            const imgRes = await fetch(`http://127.0.0.1:5000/frames/frame_${data.latest_index}.jpg`);
+            const blob = await imgRes.blob();
+            setImgUrl(URL.createObjectURL(blob));
           }
+        } catch (e) {
+          console.error('❌ Error:', e);
         }
-        isUploadingRef.current = false;
-      }, 'image/jpeg', 0.3);
+        await new Promise(r => setTimeout(r, 33)); // ~30fps
+      }
     };
+    fetchLoop();
 
-    video.addEventListener('play', () => {
-      captureInterval = setInterval(capture, 33);
-    });
-    video.addEventListener('pause', () => clearInterval(captureInterval));
-    video.addEventListener('ended', () => clearInterval(captureInterval));
-
-    return () => clearInterval(captureInterval);
-  }, []);
+    return () => { running = false; };
+  }, [latestIndex]);
 
   return (
     <div>
-      <h2>🎥 Máy A</h2>
-      <video ref={videoRef} src="/NguyenOanh-PhanVanTri-01.mp4" controls autoPlay muted style={{ maxWidth: '100%' }}/>
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <h3>🎥 Phát video từ frame</h3>
+      {imgUrl && <img src={imgUrl} alt="frame" style={{ maxWidth: '100%' }}/> }
+      <p>Frame index: {latestIndex}</p>
     </div>
   );
 }
